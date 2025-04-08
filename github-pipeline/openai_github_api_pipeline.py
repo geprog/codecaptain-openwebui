@@ -1,10 +1,9 @@
-import asyncio
-import traceback
-from typing import List, Union, Generator, Iterator, Sequence
 import os
 import requests
 import json
 import base64
+import traceback
+from typing import List, Union, Generator, Iterator, Sequence
 from pydantic import BaseModel, Field
 from langchain import hub
 from langchain_openai import ChatOpenAI
@@ -41,46 +40,42 @@ class Pipeline:
 
     class Valves(BaseModel):
 
-        OPENAI_API_BASE_URL: str
-        OPENAI_API_KEY: str
-        OPENAI_API_MODEL: str
-        OPENAI_API_TEMPERATURE: float
+        OPENAI_API_BASE_URL: str = "https://api.openai.com/v1"
+        OPENAI_API_KEY: str = ""
+        OPENAI_API_MODEL: str = "gpt-4o"
+        OPENAI_API_TEMPERATURE: float = 0.7
+        OPENAI_EMBED_MODEL: str = "text-embedding-ada-002"
 
-        OPENAI_EMBED_MODEL: str
+        GITHUB_BASE_URL: str = "https://api.github.com"
+        GITHUB_TOKEN: str = ""
+        GITHUB_USER_NAME: str = ""
+        GITHUB_REPO_NAME: str = ""
 
-        GITHUB_BASE_URL: str
-        GITHUB_TOKEN: str
-        GITHUB_USER_NAME: str
-        GITHUB_REPO_NAME: str
-
-        SYSTEM_PROMPT: str
+        SYSTEM_PROMPT: str = "You are a smart assistant that read from github repository, retrieves their information, analyzes them, and assists users with Q&A over extracted content."
         
     def __init__(self):
 
-        self.name = "Chat with GitHub with valves"
+        self.name = "Chat with GitHub Repository"
+        self.check = 0
 
         self.valves = self.Valves(
-            **{
-                "OPENAI_API_BASE_URL": os.getenv("OPENAI_API_BASE_URL", "https://api.openai.com/v1"),
-                "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
-                "OPENAI_API_MODEL": os.getenv("OPENAI_API_MODEL", "gpt-4o"),
-                "OPENAI_API_TEMPERATURE": os.getenv("OPENAI_API_TEMPERATURE", 0.7),
+            OPENAI_API_BASE_URL = os.getenv("OPENAI_API_BASE_URL", ""),
+            OPENAI_API_MODEL = os.getenv("OPENAI_API_MODEL", ""),
+            OPENAI_API_TEMPERATURE = float(os.getenv("OPENAI_API_TEMPERATURE"), ""),
+            OPENAI_EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", ""),
+            OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", ""),
 
-                "OPENAI_EMBED_MODEL": os.getenv("OPENAI_EMBED_MODEL", "text-embedding-ada-002"),
+            GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", ""),
+            GITHUB_BASE_URL = os.getenv("GITHUB_BASE_URL", ""),
+            GITHUB_USER_NAME = os.getenv("GITHUB_USER_NAME", ""),
+            GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME", ""),
 
-                "GITHUB_BASE_URL": os.getenv("GITHUB_BASE_URL", "https://api.github.com"),
-                "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN", ""),
-                "GITHUB_USER_NAME": os.getenv("GITHUB_USER_NAME", ""),
-                "GITHUB_REPO_NAME": os.getenv("GITHUB_REPO_NAME", ""),
-                
-                "SYSTEM_PROMPT": os.getenv("SYSTEM_PROMPT", "You are a smart assistant that read from github repository, retrieves their information, analyzes them, and assists users with Q&A over extracted content."),
-            }
+            SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", ""),
         )
 
         self.tools = [search_repository]
-        self.pipelines = self.get_openai_models()
     
-    def on_startup(self):
+    def set_github_repo(self):
         """Loads GitHub repository data and creates an index."""
         try:
             global index, documents
@@ -248,6 +243,11 @@ class Pipeline:
     def pipe(self, user_message: str, model_id: str, messages: List[dict], body: dict):
         """Processes user messages and interacts with the LLM."""
         try:
+            if self.check == 0:
+                self.pipelines = self.get_openai_models()
+                self.set_github_repo()
+                self.check = 1
+
             model = ChatOpenAI(
                 api_key=self.valves.OPENAI_API_KEY,
                 model=self.valves.OPENAI_API_MODEL,
